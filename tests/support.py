@@ -12,10 +12,13 @@ from rework.process.revisions import freeze_process
 from rework.report.ledger import ReportLedger
 from rework.routing.assignments import RouteAssignment, TerminalDisposition
 from rework.routing.catalog import RoutingCatalog
+from rework.routing.deadline_intake import receive_deadline_evidence
 from rework.routing.intake import receive_evidence
 from rework.routing.plans import freeze_route
 from rework.routing.port_checks import PortRef
 from rework.station.codec import encode_evidence
+from rework.station.deadline_codec import decode_deadline_evidence
+from rework.station.deadline_issue import issue_deadline_evidence
 from rework.station.issue import StationEvidenceStore, issue_evidence
 
 
@@ -112,3 +115,20 @@ class ProjectCase(unittest.TestCase):
             self.issue('alpha', alpha_batch(revisit)),
             self.issue('beta', beta_batch(pass_minutes, other_minutes)),
         )
+
+    def issue_with_companion(self, name, observation_batch, coverage=4):
+        """Issue a V1 piece and a deadline companion against an open station."""
+        with self.station(name) as (_, revisions, issued):
+            draft = revisions.save_draft(observation_batch)
+            revision = freeze_process(revisions, draft.draft_id)
+            piece = issue_evidence(revisions, issued, revision.revision_id)
+            companion_payload = issue_deadline_evidence(
+                revisions, issued, piece.identity.evidence_id, coverage,
+            )
+            companion = decode_deadline_evidence(companion_payload)
+            return piece, companion, companion_payload
+
+    def admit_companion(self, catalog, piece, companion_payload):
+        receive_evidence(catalog, encode_evidence(piece))
+        companion_id = receive_deadline_evidence(catalog, companion_payload)
+        return companion_id

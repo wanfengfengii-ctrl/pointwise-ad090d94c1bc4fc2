@@ -27,4 +27,16 @@
 
 `read_report(ledger, report_id)` 按原号取回原数值、单位、路由、开工入口和全部固定件出处，并记录本次成功领取。`export_report(snapshot)` 返回带换行的 UTF-8 JSON 字节。报告读取使用已存快照，同一报告的导出在后续更正与重开后保持一致。
 
+## 交班限时复核（断源签发）
+
+站库关闭后，质控员只凭公开端口数据核定在交班时限内沿真实出口抵达 `TerminalDisposition.PASS` 的精确概率。时限含端点，分钟为非负整数（布尔值拒绝）；站内返修与跨站返流共用同一份累计分钟预算，零分钟接续（含任意有限次零分钟循环）以精确线性求解处理。报废、超时和永久滞留保持未达标，原有缺失质量保持缺失。
+
+- `rework.station.deadline_issue.issue_deadline_evidence(revisions, issued, evidence_id, coverage)` 在站库打开时从已发行的 V1 站件读取其绑定修订，按公开入口与实际出口计算 `0..coverage` 的逐分钟精确质量，发行一份伴随件并返回 UTF-8 JSON 字节。原工位、完整站内工序图和逐次观察仍只保存在站端，不进入伴随件。
+- `rework.station.deadline_codec` 的 `encode_deadline_evidence` / `decode_deadline_evidence` 交换伴随件信封：`kind="deadline-evidence"`、`version=1`、`companion_id`、V1 `parent` 身份、对 `encode_evidence(parent_piece)` 取的 `parent_sha256`、父件完整公开 `entries`/`exits`、`coverage` 与稀疏逐分钟 `data`。有理质量采用约分分数字符串。
+- `rework.routing.deadline_intake.receive_deadline_evidence(catalog, payload)` 在中心先接纳 V1 父件，再核对父件身份、指纹和公开端口后接纳伴随件，返回伴随件号。同号同内容重投返回原号，同号异内容拒绝。
+- `rework.analysis.deadline_assessment.publish_deadline_assessment(catalog, ledger, route_id, start, limit, companion_ids)` 按已冻结路由、`PortRef` 开工入口、非负整数 `limit` 和与路由每件一一对应且覆盖 `limit` 的伴随件签发限时报告。
+- `rework.report.ledger.read_deadline_report(ledger, report_id)` 凭原号读取快照，属性为 `report_id`、`route_id`、`start`、`limit`、`pieces`、`companion_ids`、`probability`（`Fraction`，可为零）。领取使用存值，更正及重开后保持原出处和结论。
+
+未知编号报 `KeyError`；非法输入、身份不符、坏件、选件漏配或重复及覆盖不足报 `ValueError`。发行、接纳、签发各自原子提交，失败无新增且可重试。`python3 -B deadline_examples.py` 同时演示 V1 与限时结果；`python3 -B demo.py` 在 V1 场景后追加断源限时签发与源更正后重开领取。
+
 未知记录抛出 `KeyError`。输入、冻结状态、身份冲突及损坏证据错误抛出 `ValueError`。SQLite 错误由调用方接收。各存储对象借用调用方提供的连接，写入操作管理自己的事务，须在该连接没有待提交事务时调用。非法批次、发行、接线、核账及失败的报告提交均无对应的新增成果。未知报告号不增加领取记录。可重复调用 `initialize()`，已有草稿及中心业务记录会保留。

@@ -22,6 +22,11 @@ class StationEvidenceStore:
                     evidence_id TEXT PRIMARY KEY, payload BLOB NOT NULL, digest TEXT NOT NULL
                 )
             ''')
+            self.connection.execute('''
+                CREATE TABLE IF NOT EXISTS issued_deadline_evidence (
+                    companion_id TEXT PRIMARY KEY, payload BLOB NOT NULL, digest TEXT NOT NULL
+                )
+            ''')
 
     def _insert(self, piece: StationEvidence) -> None:
         payload = encode_evidence(piece)
